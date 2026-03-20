@@ -388,6 +388,7 @@ defmodule Ash.Changeset do
 
   require Ash.Tracer
   import Ash.Expr
+  import Ash.Gettext
   require Logger
 
   defmodule OriginalDataNotAvailable do
@@ -1130,16 +1131,22 @@ defmodule Ash.Changeset do
 
   @doc false
   def run_atomic_validation(changeset, %{where: where} = validation, context) do
-    with {:atomic, condition} <- atomic_condition(where, changeset, context) do
-      case condition do
-        false ->
-          changeset
+    if validation.before_action? do
+      {:not_atomic,
+       "before_action? validation `#{inspect(elem(validation.validation, 0))}` cannot be run atomically. " <>
+         "To use before_action? validations, set `require_atomic? false` or use `strategy: [:stream]`."}
+    else
+      with {:atomic, condition} <- atomic_condition(where, changeset, context) do
+        case condition do
+          false ->
+            changeset
 
-        true ->
-          do_run_atomic_validation(changeset, validation, context)
+          true ->
+            do_run_atomic_validation(changeset, validation, context)
 
-        where_condition ->
-          do_run_atomic_validation(changeset, validation, context, where_condition)
+          where_condition ->
+            do_run_atomic_validation(changeset, validation, context, where_condition)
+        end
       end
     end
   end
@@ -3501,7 +3508,7 @@ defmodule Ash.Changeset do
         changeset,
         InvalidAttribute.exception(
           field: key,
-          message: "cannot be changed",
+          message: error_message("cannot be changed"),
           value: changeset.attributes[key]
         )
       )
@@ -5937,7 +5944,7 @@ defmodule Ash.Changeset do
         error =
           InvalidRelationship.exception(
             relationship: relationship.name,
-            message: "relationship is not editable"
+            message: error_message("relationship is not editable")
           )
 
         add_error(changeset, error)
@@ -5946,7 +5953,7 @@ defmodule Ash.Changeset do
         error =
           InvalidRelationship.exception(
             relationship: relationship.name,
-            message: "cannot manage a manual relationship"
+            message: error_message("cannot manage a manual relationship")
           )
 
         add_error(changeset, error)
@@ -6036,7 +6043,7 @@ defmodule Ash.Changeset do
               changeset,
               InvalidRelationship.exception(
                 relationship: relationship.name,
-                message: "cannot provide structs that don't match the destination"
+                message: error_message("cannot provide structs that don't match the destination")
               )
             )
           else
